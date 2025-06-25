@@ -3,7 +3,7 @@ import logging
 import os
 from dotenv import load_dotenv
 import numpy as np
-
+import uuid
 from app.config import logger
 import chromadb
 from chromadb.api import ClientAPI
@@ -59,7 +59,8 @@ def store_embeddings(chunks: List[str], metadatas: List[Dict[str, Union[str, int
     """
     try:
         collection = get_chroma_collection()
-        ids = [f"chunk_{i}" for i in range(len(chunks))]
+        ids = [f"chunk_{uuid.uuid4()}" for _ in range(len(chunks))]
+
         vectors = [np.asarray(vec, dtype=np.float32) for vec in embed_texts(chunks)]
         metadatas_cast = cast(List[Mapping[str, Optional[Union[str, int, float, bool]]]], metadatas)
         collection.add(
