@@ -66,6 +66,7 @@ def store_embeddings(chunks: List[str], metadatas: List[Dict[str, Union[str, int
             ids=ids,
             embeddings=cast(List[Any], vectors),  # type: ignore[arg-type]
             metadatas=metadatas_cast,
+            documents=chunks,
         )
         logger.info("Stored %d chunks in Chroma Cloud.", len(chunks))
     except Exception as e:

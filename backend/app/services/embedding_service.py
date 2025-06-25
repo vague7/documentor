@@ -1,6 +1,6 @@
 """Service layer for text embeddings via Google Generative AI (Gemini)."""
 from functools import lru_cache
-from typing import List
+from typing import List, Any, cast
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from pydantic import SecretStr
