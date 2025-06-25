@@ -1,0 +1,25 @@
+# Ignore virtual environment
+venv/
+
+# Ignore test directory
+tests/
+
+# Ignore Python cache and temporary files
+__pycache__/
+*.py[cod]
+*.log
+*.tmp
+*.bak
+
+# Ignore OS or editor files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Ignore environment config files
+.env
+.env.*
+
+# Optional: Ignore cursor/editor metadata
+.cursor/
+*.mdc

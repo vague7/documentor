@@ -1,0 +1,245 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+
+   
+You are an experienced Python backend engineer and AI developer. Your task is to help build the **backend + AI engine** for a SaaS platform called **DocuMentor**.
+
+This project is broken into **small, incremental, phase-wise development steps**, where each phase corresponds to exactly **one file or tightly related functionality** to ensure smooth progress without overwhelming context.
+This tool allows users (developers, non-tech users, product teams) to input API documentation (via PDF or public URL) and receive intelligent assistance through an LLM agent. The system enables:
+
+        -Natural language Q&A over the API docs
+        -Suggestions of relevant endpoints
+        -Code snippet generation (Python, JavaScript, cURL)
+        -Postman collection generation
+Core Problem & Solution
+
+        ### Problem:
+        Users often struggle to understand and integrate APIs by reading long docs. They need a simple way to ask questions and get answers from any API documentation they provide.
+
+        ### Solution:
+        1. Allow users to upload a PDF or provide a public URL of API docs.
+        2. Parse and chunk the content intelligently.
+        3. Embed the chunks into a Chroma vector store using Gemini embedding API.
+        4. Expose an endpoint for users to query the docs via chat using LangChain + Gemini.
+
+
+    You must use Gemini AI+ Langchain for all generative tasks, including reasoning over documents and producing code. Here's a breakdown of the full system functionality and backend development flow:
+
+    Backend:
+
+    Built using FastAPI (Python)
+
+    Responsibilities:
+        -REST API (FastAPI)
+        -Parse and clean text from uploaded PDFs and URLs
+        -Embed documents using Gemini-compatible embedding model
+        -Store vectors in Chroma 
+        -Serve endpoints to ask questions, generate code, and export data
+        -Chat interface that queries embedded vectors
+        - Clean modular structure, testable components
+
+LLM Agent (Gemini+Langchain):
+        -Reads embedded API documentation
+        -Answers natural language queries
+        -Suggests endpoints and their use cases
+        -Generates well-formatted code in multiple languages
+        -Constructs Postman-compatible collections
+
+Key LangChain Modules to Use in This Project
+
+| Module                          | Use                                                  |
+| ------------------------------- | ---------------------------------------------------- |
+| `TextSplitter`                  | Chunk documents smartly (by tokens, sentences, etc.) |
+|  `Chroma`                       | Embed + store searchable vector chunks               |
+| `RetrievalQA`                   | RAG pipeline for document-based Q\&A                 |
+| `Tool`, `initialize_agent`      | Create agent with custom tools                       |
+| `PromptTemplate`                | Define structured prompts for Gemini                 |
+| `ConversationBufferMemory`      | Keep chat context                                    |
+| `ChatMessageHistory`            | Maintain multi-turn dialog context                   |
+| `(→ Gemini wrapper)`            | Core LLM call interface                              |
+
+
+High-Level Architecture:
+        backend/
+        ├── app/
+        │ ├── main.py # FastAPI entry point
+        │ ├── config.py # ENV loader, logging setup
+        │ ├── routers/
+        │ │ ├── ingest_router.py # /upload, /ingest
+        │ │ └── chat_router.py # /chat
+        │ ├── services/
+        │ │ ├── doc_parser.py # Parse PDFs/URLs
+        │ │ ├── ingestor.py # Chunk, embed, store
+        │ │ └── query_engine.py # Retrieve relevant chunks, call LLM
+        │ ├── vector/
+        │ │ └── chroma_client.py # Init/store/query Chroma
+        │ ├── models/
+        │ │ └── schemas.py # Pydantic models for requests/responses
+        │ └── utils/
+        │ └── text_utils.py # Cleaners, chunkers, helper methods
+        ├── tests/
+        │ └── test_*.py # Unit tests
+        ├── requirements.txt
+        └── Dockerfile
+
+
+---
+
+## 4. Development Flow - Phased Breakdown
+
+Each phase should:
+- Deliver only the relevant module or file
+- Include clean code with docstrings, comments, typing
+- Follow naming conventions (`snake_case` for vars/fns, `PascalCase` for classes)
+- Be modular, testable, and production-grade
+- Include simple logging and exception handling where appropriate
+
+---
+
+### ✅ Phase 1: `config.py`
+**Goal:** Load environment variables like `GEMINI_API_KEY`, `CHROMA_DB_URL`. Setup logging.
+
+**Deliverable:**
+- `get_settings()` function using `pydantic.BaseSettings`
+- Logger using `logging` module
+
+---
+
+### ✅ Phase 2: `doc_parser.py`
+**Goal:** Parse content from either:
+- PDF uploads
+- Public HTML API doc URLs
+
+**Deliverable:**
+- `parse_pdf(file: bytes) -> str`
+- `parse_url(url: str) -> str`
+- Use `pdfplumber` or `PyMuPDF` for PDFs, `requests + BeautifulSoup` for HTML
+
+---
+
+### ✅ Phase 3: `text_utils.py`
+**Goal:** Text cleanup and chunking
+
+**Deliverable:**
+- `clean_text(text: str) -> str`
+- `chunk_text(text: str) -> List[str]` using LangChain’s text splitter
+
+---
+
+### ✅ Phase 4: `chroma_client.py`
+**Goal:** Interact with Chroma DB
+
+**Deliverable:**
+- `init_chroma()` – connects or creates DB
+- `store_embeddings(chunks: List[str], metadatas: List[dict])`
+- `query_similar_docs(query: str) -> List[str]`
+
+---
+
+### ✅ Phase 5: `ingestor.py`
+**Goal:** Combine parsing + chunking + embedding + storage
+
+**Deliverable:**
+- `ingest_pdf(file: bytes)`
+- `ingest_url(url: str)`
+- Uses `doc_parser`, `text_utils`, `chroma_client`
+
+---
+
+### ✅ Phase 6: `schemas.py`
+**Goal:** Define all request/response models
+
+**Deliverable:**
+- `IngestRequest`, `ChatRequest`, `ChatResponse`
+- Use `pydantic.BaseModel`
+
+---
+
+### ✅ Phase 7: `ingest_router.py`
+**Goal:** Expose ingestion routes
+
+**Deliverable:**
+- POST `/ingest/pdf` → accepts file
+- POST `/ingest/url` → accepts URL
+- Calls appropriate ingestor functions and returns response
+
+---
+
+### ✅ Phase 8: `query_engine.py`
+**Goal:** Run retrieval + LLM chain
+
+**Deliverable:**
+- `answer_query(user_question: str) -> str`
+- Retrieves docs via Chroma
+- Constructs prompt and calls Gemini via LangChain
+
+---
+
+### ✅ Phase 9: `chat_router.py`
+**Goal:** Expose chat endpoint
+
+**Deliverable:**
+- POST `/chat` → expects `ChatRequest`
+- Returns `ChatResponse` from `query_engine`
+
+---
+
+### ✅ Phase 10: `main.py`
+**Goal:** FastAPI entrypoint
+
+**Deliverable:**
+- Create FastAPI app
+- Register routers
+- Add CORS middleware
+- Add health check route
+
+---
+
+### ✅ Phase 11: `test_*.py`
+**Goal:** Unit tests for all core modules
+
+**Deliverable:**
+- `test_doc_parser.py`, `test_ingestor.py`, `test_chat_router.py`, etc.
+- Use `pytest`
+- Test at least 1 core function per module
+
+---
+
+
+## ⚙️ 5. Agent Instructions
+
+- Do not skip any phases
+- Use consistent, meaningful function/variable names
+- Use environment variables, not hardcoded API keys
+- Add inline comments and docstrings
+- Avoid massive multi-feature dumps — stick to **1 file per phase**
+- Always assume LangChain, Gemini and Chroma are used
+-Gemini is the only LLM used
+-Outputs must be grounded in retrieved document chunks
+-Responses must be specific, code-safe, and explain reasoning when needed
+-Avoid hallucinating endpoints not found in source documentation
+-Every generation must maintain consistent style and format across code snippets
+
+
+---
+
+🎯 **Start now with Phase 1**:  
+Create `config.py` containing:
+- `Settings` class with fields: `gemini_api_key`, `chroma_db_url`
+- `get_settings()` singleton accessor
+- Logging setup using Python's built-in `logging` module
+- Use `dotenv` if needed
+
+
+
+
+
+
+
+
+
+
+
