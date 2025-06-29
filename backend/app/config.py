@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     chroma_api_key: str
     chroma_tenant: str
     chroma_database: str
+    history_backend: str = "mongo"
+    mongodb_uri: str
 
     class Config:
         env_file = ".env"

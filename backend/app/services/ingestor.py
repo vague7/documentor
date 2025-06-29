@@ -6,6 +6,9 @@ from app.config import logger
 from app.services.doc_parser import parse_pdf, parse_url
 from app.utils.text_utils import clean_text, chunk_text
 from app.vector.chroma_client import store_embeddings
+from langchain_community.vectorstores import Chroma
+
+
 
 
 def ingest_pdf(file: bytes) -> Dict[str, Any]:

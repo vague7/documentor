@@ -1,99 +1,84 @@
-from typing import List, Dict, Any, Optional, Union, Sequence, Mapping, cast
-import logging
+"""Vector store utilities built on top of LangChain's `Chroma` wrapper.
+
+This replaces the bespoke Chroma Cloud client logic with the official
+LangChain integration. The public API surface (`store_embeddings`,
+`query_similar_docs`) remains unchanged so that downstream services do
+not need to be refactored.
+"""
+
+from __future__ import annotations
+
 import os
-from dotenv import load_dotenv
-import numpy as np
-import uuid
+from functools import lru_cache
+from typing import List, Dict, Union, Any
+
+from langchain_community.vectorstores import Chroma
+from langchain_core.documents import Document
+import chromadb  # type: ignore  # noqa: F401
+
+from app.services.embedding_service import get_embedder
 from app.config import logger
-import chromadb
-from chromadb.api import ClientAPI
-from chromadb.api.models.Collection import Collection
-from app.services.embedding_service import embed_texts
-
-load_dotenv()
-
-_client: Optional[ClientAPI] = None
-_collection: Optional[Collection] = None
 
 
-def get_chroma_client() -> ClientAPI:
-    """
-    Initializes and returns a ChromaDB Cloud client using environment variables.
-    """
-    global _client
-    if _client is None:
-        api_key = os.getenv("CHROMA_API_KEY")
-        tenant = os.getenv("CHROMA_TENANT")
-        database = os.getenv("CHROMA_DATABASE")
-        if not api_key or not tenant or not database:
-            logger.error("Missing Chroma Cloud environment variables.")
-            raise ValueError("Missing Chroma Cloud environment variables.")
-        _client = chromadb.CloudClient(
-            api_key=api_key,
-            tenant=tenant,
-            database=database
-        )
-        logger.info("Chroma Cloud client initialized.")
-    return _client
+# ---------------------------------------------------------------------------
+# Singleton helpers
+# ---------------------------------------------------------------------------
 
 
-def get_chroma_collection(client: Optional[ClientAPI] = None) -> Collection:
-    """
-    Initializes and returns the ChromaDB collection.
-    """
-    global _collection
-    if _collection is None:
-        if client is None:
-            client = get_chroma_client()
-        _collection = client.get_or_create_collection(name="documentor")
-        logger.info("Chroma Cloud collection initialized.")
-    return _collection
+@lru_cache()
+def _get_chroma_client() -> Any:  # pragma: no cover
+    """Instantiate a Chroma Cloud client from env variables."""
+    api_key = os.getenv("CHROMA_API_KEY")
+    tenant = os.getenv("CHROMA_TENANT")
+    database = os.getenv("CHROMA_DATABASE")
+    if not api_key or not tenant or not database:
+        logger.error("Missing Chroma Cloud environment variables.")
+        raise ValueError("Missing Chroma Cloud environment variables.")
+    return chromadb.CloudClient(api_key=api_key, tenant=tenant, database=database)
 
 
-def store_embeddings(chunks: List[str], metadatas: List[Dict[str, Union[str, int, float, bool, None]]]) -> None:
-    """
-    Stores text chunks and their metadata in Chroma Cloud collection.
-    Args:
-        chunks (List[str]): List of text chunks.
-        metadatas (List[dict]): List of metadata dicts for each chunk.
-    """
+@lru_cache()
+def get_vectorstore() -> Chroma:
+    """Return a singleton LangChain `Chroma` vector store instance."""
+    client = _get_chroma_client()
+    embedder = get_embedder()
+    vs = Chroma(
+        client=client,
+        collection_name="documentor",
+        embedding_function=embedder,
+    )
+    logger.info("LangChain Chroma vector store initialised.")
+    return vs
+
+
+# ---------------------------------------------------------------------------
+# Public API (compatible with previous implementation)
+# ---------------------------------------------------------------------------
+
+
+def store_embeddings(
+    chunks: List[str],
+    metadatas: List[Dict[str, Union[str, int, float, bool, None]]],
+) -> None:
+    """Add text chunks to the Chroma vector store."""
+
+    docs = [Document(page_content=text, metadata=meta) for text, meta in zip(chunks, metadatas)]
     try:
-        collection = get_chroma_collection()
-        ids = [f"chunk_{uuid.uuid4()}" for _ in range(len(chunks))]
-
-        vectors = [np.asarray(vec, dtype=np.float32) for vec in embed_texts(chunks)]
-        metadatas_cast = cast(List[Mapping[str, Optional[Union[str, int, float, bool]]]], metadatas)
-        collection.add(
-            ids=ids,
-            embeddings=cast(List[Any], vectors),  # type: ignore[arg-type]
-            metadatas=metadatas_cast,
-            documents=chunks,
-        )
-        logger.info("Stored %d chunks in Chroma Cloud.", len(chunks))
+        get_vectorstore().add_documents(docs)
+        logger.info("Stored %d chunks in Chroma.", len(chunks))
     except Exception as e:
-        logger.error(f"Failed to store embeddings: {e}")
+        logger.error("Failed to store embeddings: %s", e)
         raise
 
 
 def query_similar_docs(query: str, k: int = 5) -> List[str]:
-    """
-    Queries Chroma Cloud for the most similar document chunks to the query.
-    Args:
-        query (str): The user query.
-        k (int): Number of top results to return.
-    Returns:
-        List[str]: List of relevant text chunks.
-    """
+    """Return the `k` most similar document chunks for the given query."""
+
+    retriever = get_vectorstore().as_retriever(search_kwargs={"k": k})
     try:
-        collection = get_chroma_collection()
-        query_vec = np.asarray(embed_texts([query])[0], dtype=np.float32)
-        results = collection.query(query_embeddings=[query_vec], n_results=k)
-        documents = results.get("documents")
-        if not documents or not isinstance(documents, list) or not documents[0]:
-            logger.info("No similar chunks found for query.")
-            return []
-        logger.info("Found %d similar chunks for query.", len(documents[0]))
-        return documents[0]
+        docs = retriever.invoke(query)
+        logger.info("Found %d similar chunks for query.", len(docs))
+        return [doc.page_content for doc in docs]
     except Exception as e:
-        logger.error(f"Failed to query similar docs: {e}")
+        logger.error("Failed to query similar docs: %s", e)
         raise 
