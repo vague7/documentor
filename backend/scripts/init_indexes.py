@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-#MONGODB_URI= "mongodb+srv://stellar123:Qwerty123@cluster0.uft4v.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+
 MONGODB_URI = os.getenv("MONGODB_URI")
 DATABASE_NAME = os.getenv("MONGODB_DB", "documentor")
 
