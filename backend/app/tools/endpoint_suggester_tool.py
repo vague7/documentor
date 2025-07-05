@@ -27,7 +27,7 @@ _ENDPOINT_SUGGESTER_TEMPLATE = ChatPromptTemplate.from_messages(
 )
 
 
-@tool
+@tool(description="Suggest the best API endpoint for the given developer question.")
 def endpoint_suggester(question: str, top_k: int = 5) -> str:
     """Suggest the best API endpoint for the given developer question."""
     # Retrieve candidate endpoint descriptions from vectorstore
@@ -36,7 +36,8 @@ def endpoint_suggester(question: str, top_k: int = 5) -> str:
     endpoints: List[str] = [d.metadata.get("source", d.page_content) for d in docs]
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash", google_api_key=get_settings().gemini_api_key, temperature=0
+        model="gemini-2.5-flash", google_api_key=get_settings().gemini_api_key, temperature=0,
+        convert_system_message_to_human=True,
     )
 
     chain = _ENDPOINT_SUGGESTER_TEMPLATE | llm | StrOutputParser()

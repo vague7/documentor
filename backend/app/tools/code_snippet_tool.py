@@ -81,7 +81,8 @@ def _raw_snippet_from_llm(
 
     settings = get_settings()
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash", google_api_key=settings.gemini_api_key, temperature=0
+        model="gemini-2.5-flash", google_api_key=settings.gemini_api_key, temperature=0,
+        convert_system_message_to_human=True,
     )
 
     chain = _CODE_SNIPPET_TEMPLATE | llm | StrOutputParser()
@@ -123,8 +124,8 @@ def _generate_snippet(
 # Tool definition
 # ---------------------------------------------------------------------------
 
-
-@tool
+#TODO: add a description for the tool
+@tool(description="Generate a language-specific code snippet for an API call.")
 def code_snippet(
     endpoint: str,
     method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"],

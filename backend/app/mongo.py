@@ -31,5 +31,6 @@ def get_mongo_client() -> AsyncIOMotorClient:
             raise RuntimeError("Environment variable MONGODB_URI not set.")
 
         _client = AsyncIOMotorClient(mongo_uri)
-
+        
+    print("MongoDB client initialized")
     return _client 

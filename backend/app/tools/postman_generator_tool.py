@@ -27,12 +27,13 @@ _POSTMAN_TEMPLATE = ChatPromptTemplate.from_messages(
 )
 
 
-@tool
+@tool(description="Generate a Postman collection JSON for the provided endpoints.")
 def postman_generator(name: str, endpoints: List[str]) -> str:
     """Generate a Postman collection JSON for the provided endpoints."""
     settings = get_settings()
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash", google_api_key=settings.gemini_api_key, temperature=0
+        model="gemini-2.5-flash", google_api_key=settings.gemini_api_key, temperature=0,
+        convert_system_message_to_human=True,
     )
 
     chain = _POSTMAN_TEMPLATE | llm | StrOutputParser()

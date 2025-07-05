@@ -14,7 +14,7 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.messages import BaseMessage, messages_from_dict, messages_to_dict
 
 from app.mongo import get_mongo_client
-from app.history_store import AbstractHistoryStore
+from app.history_store import AbstractHistoryStore, DEFAULT_HISTORY_STORE
 
 # MongoDB / Atlas constants ---------------------------------------------------
 DB_NAME = "documentor"
@@ -25,7 +25,16 @@ COLLECTION_NAME = "messages"
 
 def _serialise_message(msg: BaseMessage) -> dict:  # noqa: D401
     """Convert a LangChain *BaseMessage* into the dict format stored in Mongo."""
+    # Flatten list-like content (observed when Gemini streams) before serialising
+    if isinstance(getattr(msg, "content", None), list):
+        msg.content = "\n".join(map(str, msg.content))  # type: ignore[attr-defined]
+
     d = messages_to_dict([msg])[0]  # type: ignore[arg-type]
+
+    # Extra safety: ensure the dict content is also a string in case of exotic subclasses
+    if isinstance(d.get("data", {}).get("content"), list):
+        d["data"]["content"] = "\n".join(map(str, d["data"]["content"]))
+
     return {
         "session_id": None,  # filled by caller
         "message": d,
@@ -34,7 +43,14 @@ def _serialise_message(msg: BaseMessage) -> dict:  # noqa: D401
 
 
 def _deserialise_messages(raw: List[dict]) -> List[BaseMessage]:
-    return messages_from_dict([doc["message"] for doc in raw])
+    msgs = messages_from_dict([doc["message"] for doc in raw])
+
+    # Repair any legacy messages that still store list content
+    for m in msgs:
+        if isinstance(getattr(m, "content", None), list):
+            m.content = "\n".join(map(str, m.content))  # type: ignore[attr-defined]
+
+    return msgs
 
 
 # Proxy wrapper ---------------------------------------------------------------
@@ -48,12 +64,15 @@ class _PersistentChatHistory(ChatMessageHistory):
         self._store = store
 
     def add_message(self, message: BaseMessage) -> None:  # type: ignore[override]
+        # Gemini may return content as list[str]; flatten to single string
+        if isinstance(getattr(message, "content", None), list):
+            message.content = "\n".join(map(str, message.content))  # type: ignore[attr-defined]
+
         super().add_message(message)
+
         # Fire-and-forget persistence to avoid blocking (best-effort)
-        try:
-            self._store.append(self._session_id, message)
-        except Exception:  # pragma: no cover – never crash user flow
-            pass
+        self._store.append(self._session_id, message)
+        # pragma: no cover – never crash user flow
 
 
 # Store implementation --------------------------------------------------------
@@ -90,7 +109,15 @@ class MongoHistoryStore(AbstractHistoryStore):
     async def _async_append(self, session_id: str, message: BaseMessage):
         doc = _serialise_message(message)
         doc["session_id"] = session_id
-        await self._coll.insert_one(doc)
+        try:
+            await self._coll.insert_one(doc)
+        except Exception as exc:
+            from app.config import logger
+            logger.exception("Mongo insert failed")
+            raise        # let the API return 500 so you notice
 
     async def _async_clear(self, session_id: str):
-        await self._coll.delete_many({"session_id": session_id}) 
+        await self._coll.delete_many({"session_id": session_id})
+
+print(type(DEFAULT_HISTORY_STORE))
+# should print MongoHistoryStore 

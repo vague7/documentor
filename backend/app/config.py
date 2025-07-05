@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     chroma_database: str
     history_backend: str = "mongo"
     mongodb_uri: str
+    mongodb_db: str
 
     class Config:
         env_file = ".env"
@@ -34,6 +35,6 @@ def get_settings() -> Settings:
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    format="[%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("documentor.backend") 

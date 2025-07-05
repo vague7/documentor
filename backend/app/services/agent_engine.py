@@ -3,9 +3,10 @@ import json
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent  # type: ignore
-from langchain_core.messages import HumanMessage, BaseMessage
+from langchain_core.messages import HumanMessage, BaseMessage, AIMessage
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
+from langchain import hub
 
 from app.config import get_settings, logger
 from app.models.schemas import ChatResponse
@@ -19,7 +20,7 @@ from app.history_store import DEFAULT_HISTORY_STORE
 # ---------------------------------------------------------------------------
 
 _agent_executor = None
-
+prompt = hub.pull("hwchase17/react") 
 
 def _build_agent_executor():
     global _agent_executor
@@ -94,10 +95,28 @@ def run_agent_query(user_question: str, session_id: str = "default") -> ChatResp
             {"messages": current_msgs},
             config={"configurable": {"session_id": session_id}},
         )
-        # result is a list of messages; take the last AI message content
+
+        # The agent may return:
+        #   1) list[BaseMessage]             – older behaviour
+        #   2) {"messages": list[BaseMessage]} – current behaviour
+        # Fall back to str(result) for anything unexpected.
         if isinstance(result, list):
-            last: BaseMessage = result[-1]
-            answer_text = getattr(last, "content", str(last))
+            msgs = result
+        elif isinstance(result, dict) and "messages" in result:
+            msgs = result["messages"]
+        else:
+            msgs = None
+
+        if msgs:
+            last: BaseMessage = msgs[-1]
+            content = getattr(last, "content", str(last))
+
+            # NEW ──────────────────────────────────────────────
+            # Gemini may return content as list[str]; join it.
+            if isinstance(content, list):
+                answer_text = "\n".join(map(str, content))
+            else:
+                answer_text = str(content)
         else:
             answer_text = str(result)
         return ChatResponse(answer=answer_text, sources=None)
@@ -120,6 +139,7 @@ def stream_agent_answer(user_question: str, session_id: str = "default") -> Gene
     agent = _build_agent_executor()
 
     current_msgs = [HumanMessage(content=user_question.strip())]
+    print(current_msgs)
     _log_payload(session_id, current_msgs)
 
     # The agent's .stream returns events containing the messages list.
